@@ -38,6 +38,8 @@ const ctx          = canvas.getContext('2d');
 
 const btnExport    = document.getElementById('btn-export');
 const btnCopy      = document.getElementById('btn-copy');
+const btnShare     = document.getElementById('btn-share');
+const shareMenu    = document.getElementById('share-menu');
 const btnUndo      = document.getElementById('btn-undo');
 const btnRedo      = document.getElementById('btn-redo');
 const btnClear     = document.getElementById('btn-clear');
@@ -51,8 +53,10 @@ function init() {
   setupToolbar();
   setupCanvas();
   setupControls();
+  setupShareDropdown();
   setupKeyboard();
   setupPaste();
+  initSegCtrls();
 }
 
 // ── Drag & Drop ───────────────────────────────────────────
@@ -690,21 +694,23 @@ function setupToolbar() {
 }
 
 function setupControls() {
-  // Presets de padding
+  // Segmented control: padding
   document.querySelectorAll('[data-padding]').forEach(btn => {
     btn.addEventListener('click', () => {
       state.padding = parseInt(btn.dataset.padding);
       document.querySelectorAll('[data-padding]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      moveSegThumb(btn);
       renderCanvas();
     });
   });
 
-  // Botones de border radius
+  // Segmented control: border radius
   radiusBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       radiusBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      moveSegThumb(btn);
       state.radius = parseInt(btn.dataset.radius);
       renderCanvas();
     });
@@ -720,9 +726,28 @@ function setupControls() {
   btnRedo.addEventListener('click', redo);
   btnClear.addEventListener('click', clearAll);
 
-  // Export / Copy
-  btnExport.addEventListener('click', exportPNG);
-  btnCopy.addEventListener('click', copyToClipboard);
+}
+
+// ── Share dropdown ────────────────────────────────────────
+function setupShareDropdown() {
+  btnShare.addEventListener('click', (e) => {
+    e.stopPropagation();
+    shareMenu.hidden = !shareMenu.hidden;
+  });
+
+  btnExport.addEventListener('click', () => {
+    shareMenu.hidden = true;
+    exportPNG();
+  });
+
+  btnCopy.addEventListener('click', () => {
+    shareMenu.hidden = true;
+    copyToClipboard();
+  });
+
+  document.addEventListener('click', () => {
+    shareMenu.hidden = true;
+  });
 }
 
 // ── Teclado ───────────────────────────────────────────────
@@ -864,13 +889,34 @@ async function copyToClipboard() {
       await navigator.clipboard.write([
         new ClipboardItem({ 'image/png': blob })
       ]);
-      const original = btnCopy.textContent;
-      btnCopy.textContent = '¡Copiado!';
-      setTimeout(() => { btnCopy.textContent = original; }, 2000);
+      const original = btnShare.textContent;
+      btnShare.textContent = 'Copied!';
+      setTimeout(() => { btnShare.textContent = original; }, 2000);
     }, 'image/png');
   } catch {
-    alert('Tu navegador no soporta copiar al portapapeles. Usa "Descargar PNG".');
+    alert('Your browser does not support copying to clipboard. Use "Download PNG".');
   }
+}
+
+// ── Segmented control thumb ───────────────────────────────
+function moveSegThumb(btn) {
+  const ctrl  = btn.closest('.seg-ctrl');
+  const thumb = ctrl.querySelector('.seg-ctrl__thumb');
+  thumb.style.width     = btn.offsetWidth + 'px';
+  thumb.style.transform = `translateX(${btn.offsetLeft - 3}px)`;
+}
+
+function initSegCtrls() {
+  document.querySelectorAll('.seg-ctrl').forEach(ctrl => {
+    const active = ctrl.querySelector('.seg-ctrl__btn.active');
+    if (!active) return;
+    const thumb = ctrl.querySelector('.seg-ctrl__thumb');
+    // Posición inicial sin animación
+    thumb.style.transition = 'none';
+    thumb.style.width      = active.offsetWidth + 'px';
+    thumb.style.transform  = `translateX(${active.offsetLeft - 3}px)`;
+    requestAnimationFrame(() => { thumb.style.transition = ''; });
+  });
 }
 
 // ── Arranque ──────────────────────────────────────────────

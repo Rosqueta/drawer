@@ -92,6 +92,44 @@ html, body {
 }
 .btn--secondary:hover { background: #F4F4F5; }
 
+/* ── Share dropdown ───────────────────────────────────────── */
+.share-dropdown {
+  position: relative;
+}
+
+.share-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  min-width: 160px;
+  z-index: 100;
+}
+
+.share-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.share-menu__item:hover {
+  background: #F4F4F5;
+}
+
 /* ── Drop overlay (reemplazar imagen) ─────────────────────── */
 .drop-overlay {
   position: fixed;
@@ -275,7 +313,7 @@ kbd {
   padding: 8px 12px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
+  border-radius: 14px;
   box-shadow: var(--shadow-md);
   pointer-events: all;
 }
@@ -340,36 +378,48 @@ kbd {
   color: var(--color-danger);
 }
 
-/* ── Preset buttons ───────────────────────────────────────── */
-.preset-btns {
+/* ── Segmented control ────────────────────────────────────── */
+.seg-ctrl {
+  position: relative;
   display: flex;
-  gap: 2px;
+  align-items: center;
+  background: #F5F5F7;
+  border-radius: 10px;
+  padding: 3px;
 }
 
-.preset-btn {
-  width: 28px;
-  height: 28px;
+.seg-ctrl__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--color-surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  transition: transform .22s cubic-bezier(.4,0,.2,1), width .22s cubic-bezier(.4,0,.2,1);
+  pointer-events: none;
+}
+
+.seg-ctrl__btn {
+  position: relative;
+  height: 26px;
+  width: 26px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: 7px;
   background: transparent;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 500;
-  color: var(--color-text-muted);
   cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s;
+  transition: color .15s;
+  z-index: 1;
 }
 
-.preset-btn:hover {
-  background: #F4F4F5;
-  color: var(--color-text);
-}
-
-.preset-btn.active {
-  background: #EEF1FF;
-  border-color: var(--color-brand);
+.seg-ctrl__btn.active {
   color: var(--color-brand);
 }
 

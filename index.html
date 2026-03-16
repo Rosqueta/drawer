@@ -1,17 +1,21 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SL Support — Image Editor</title>
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/<unique-path>/script.js"></script>
 </head>
 <body>
 
-  <!-- WORKSPACE (ocupa toda la pantalla) -->
+  <!-- WORKSPACE (full screen) -->
   <main class="workspace">
 
-    <!-- Estado vacío: drag & drop -->
+    <!-- Empty state: drag & drop -->
     <div class="dropzone" id="dropzone">
       <div class="dropzone__content">
         <div class="dropzone__icon">
@@ -22,23 +26,23 @@
             <path d="M12 28l7-6 5 5 3-3 6 6" stroke="#849FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <p class="dropzone__label">Arrastra tu captura aquí</p>
-        <p class="dropzone__paste-hint">o pega con <kbd>⌘V</kbd> / <kbd>Ctrl+V</kbd></p>
+        <p class="dropzone__label">Drop your screenshot here</p>
+        <p class="dropzone__paste-hint">or paste with <kbd>⌘V</kbd> / <kbd>Ctrl+V</kbd></p>
         <div class="dropzone__options">
-          <label class="btn btn--secondary" for="file-input">Seleccionar imagen</label>
+          <label class="btn btn--secondary" for="file-input">Select image</label>
         </div>
         <input type="file" id="file-input" accept="image/*" hidden />
       </div>
     </div>
 
-    <!-- Estado con imagen: canvas -->
+    <!-- Image loaded: canvas -->
     <div class="canvas-wrapper" id="canvas-wrapper" hidden>
       <canvas id="canvas"></canvas>
     </div>
 
   </main>
 
-  <!-- LOGO (flotante, esquina superior izquierda) -->
+  <!-- LOGO (floating, top left) -->
   <div class="float-logo">
     <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect width="32" height="32" rx="8" fill="#9DB2FF"/>
@@ -47,9 +51,9 @@
     </svg>
   </div>
 
-  <!-- ACCIONES (flotante, esquina superior derecha) -->
+  <!-- ACTIONS (floating, top right) -->
   <div class="float-actions">
-    <label class="tool-btn tool-btn--float" id="btn-new-image" for="file-input-replace" data-tooltip-below="Nueva imagen" hidden>
+    <label class="tool-btn tool-btn--float" id="btn-new-image" for="file-input-replace" data-tooltip-below="New image" hidden>
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
         <rect x="2" y="4" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
         <circle cx="6.5" cy="8" r="1.5" fill="currentColor"/>
@@ -58,72 +62,89 @@
       </svg>
     </label>
     <input type="file" id="file-input-replace" accept="image/*" hidden />
-    <button class="tool-btn tool-btn--float" id="btn-copy" data-tooltip-below="Copiar imagen">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <rect x="6" y="6" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M12 6V4.5A1.5 1.5 0 0010.5 3h-6A1.5 1.5 0 003 4.5v6A1.5 1.5 0 004.5 12H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
-    <button class="btn btn--primary" id="btn-export">Descargar</button>
+    <div class="share-dropdown">
+      <button class="btn btn--primary" id="btn-share">
+        Share
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="share-menu" id="share-menu" hidden>
+        <button class="share-menu__item" id="btn-copy">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+            <rect x="6" y="6" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M12 6V4.5A1.5 1.5 0 0010.5 3h-6A1.5 1.5 0 003 4.5v6A1.5 1.5 0 004.5 12H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Copy image
+        </button>
+        <button class="share-menu__item" id="btn-export">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+            <path d="M9 3v9M5 8l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 14h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Download PNG
+        </button>
+      </div>
+    </div>
   </div>
 
-  <!-- OVERLAY drag & drop (reemplazar imagen) -->
+  <!-- Drag & drop overlay (replace image) -->
   <div class="drop-overlay" id="drop-overlay" hidden>
     <div class="drop-overlay__pill">
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
         <path d="M10 3v10M5 8l5-5 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
-      Suelta para reemplazar la imagen
+      Drop to replace image
     </div>
   </div>
 
-  <!-- ZOOM CONTROLS (flotante, esquina inferior derecha) -->
+  <!-- ZOOM CONTROLS (floating, bottom right) -->
   <div class="zoom-controls" id="zoom-controls" hidden>
-    <button class="zoom-btn" id="btn-zoom-out" data-tooltip="Reducir zoom (-)">−</button>
-    <button class="zoom-btn zoom-btn--label" id="btn-zoom-fit" data-tooltip="Ajustar al workspace (0)">
+    <button class="zoom-btn" id="btn-zoom-out" data-tooltip="Zoom out (-)">−</button>
+    <button class="zoom-btn zoom-btn--label" id="btn-zoom-fit" data-tooltip="Fit to workspace (0)">
       <span id="zoom-value">100%</span>
     </button>
-    <button class="zoom-btn" id="btn-zoom-in" data-tooltip="Aumentar zoom (+)">+</button>
+    <button class="zoom-btn" id="btn-zoom-in" data-tooltip="Zoom in (+)">+</button>
   </div>
 
-  <!-- CROP BAR (flotante, aparece al recortar) -->
+  <!-- CROP BAR (floating, appears when cropping) -->
   <div id="crop-bar" class="crop-bar" hidden>
-    <span class="crop-bar__hint">Arrastra para seleccionar el área a recortar</span>
+    <span class="crop-bar__hint">Drag to select the area to crop</span>
     <div class="crop-bar__actions">
-      <button id="btn-crop-cancel" class="crop-bar__btn">Cancelar</button>
-      <button id="btn-crop-confirm" class="crop-bar__btn crop-bar__btn--primary" disabled>Aplicar recorte</button>
+      <button id="btn-crop-cancel" class="crop-bar__btn">Cancel</button>
+      <button id="btn-crop-confirm" class="crop-bar__btn crop-bar__btn--primary" disabled>Apply crop</button>
     </div>
   </div>
 
-  <!-- TOOLBAR (flotante, abajo centro) -->
+  <!-- TOOLBAR (floating, bottom center) -->
   <footer class="toolbar-bar">
     <div class="toolbar" id="toolbar">
 
-      <!-- Herramientas de anotación -->
+      <!-- Annotation tools -->
       <div class="toolbar__group">
-        <button class="tool-btn" data-tool="select" data-tooltip="Seleccionar (V)">
+        <button class="tool-btn" data-tool="select" data-tooltip="Select (V)">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M4 2l10 7-5.5 1.5L7 16 4 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
           </svg>
         </button>
-        <button class="tool-btn" data-tool="rect" data-tooltip="Rectángulo (R)">
+        <button class="tool-btn" data-tool="rect" data-tooltip="Rectangle (R)">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <rect x="3" y="4" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
           </svg>
         </button>
-        <button class="tool-btn" data-tool="arrow" data-tooltip="Flecha (A)">
+        <button class="tool-btn" data-tool="arrow" data-tooltip="Arrow (A)">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M4 14L13 5M13 5H8M13 5v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <button class="tool-btn" data-tool="blur" data-tooltip="Difuminar (B)">
+        <button class="tool-btn" data-tool="blur" data-tooltip="Blur (B)">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <circle cx="9" cy="9" r="5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/>
             <circle cx="9" cy="9" r="2" fill="currentColor" opacity="0.4"/>
           </svg>
         </button>
-        <button class="tool-btn" data-tool="crop" data-tooltip="Recortar (C)">
+        <button class="tool-btn" data-tool="crop" data-tooltip="Crop (C)">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M5 1v12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M1 5h12v12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -136,10 +157,11 @@
       <!-- Padding -->
       <div class="toolbar__group toolbar__group--padding">
         <span class="toolbar__label">Padding</span>
-        <div class="preset-btns">
-          <button class="preset-btn active" data-padding="80">M</button>
-          <button class="preset-btn" data-padding="140">L</button>
-          <button class="preset-btn" data-padding="200">XL</button>
+        <div class="seg-ctrl">
+          <span class="seg-ctrl__thumb"></span>
+          <button class="seg-ctrl__btn" data-padding="40">S</button>
+          <button class="seg-ctrl__btn active" data-padding="80">M</button>
+          <button class="seg-ctrl__btn" data-padding="140">L</button>
         </div>
       </div>
 
@@ -147,16 +169,17 @@
 
       <!-- Border radius -->
       <div class="toolbar__group toolbar__group--radius">
-        <span class="toolbar__label">Bordes</span>
-        <div class="preset-btns">
-          <button class="preset-btn active" data-radius="8" data-tooltip="Bordes suaves (8px)">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M2 10V6a4 4 0 0 1 4-4h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        <span class="toolbar__label">Corners</span>
+        <div class="seg-ctrl">
+          <span class="seg-ctrl__thumb"></span>
+          <button class="seg-ctrl__btn active" data-radius="8" data-tooltip="Soft corners (8px)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
             </svg>
           </button>
-          <button class="preset-btn" data-radius="16" data-tooltip="Bordes redondos (16px)">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M2 12V8a6 6 0 0 1 6-6h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+          <button class="seg-ctrl__btn" data-radius="16" data-tooltip="Round corners (16px)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1" y="1" width="12" height="12" rx="4.5" stroke="currentColor" stroke-width="1.5"/>
             </svg>
           </button>
         </div>
@@ -164,21 +187,21 @@
 
       <div class="toolbar__divider"></div>
 
-      <!-- Historial -->
+      <!-- History -->
       <div class="toolbar__group">
-        <button class="tool-btn" id="btn-undo" data-tooltip="Deshacer (Ctrl+Z)">
+        <button class="tool-btn" id="btn-undo" data-tooltip="Undo (Ctrl+Z)">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M4 8H11a4 4 0 010 8H7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <path d="M7 5L4 8l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <button class="tool-btn" id="btn-redo" data-tooltip="Rehacer (Ctrl+Y)">
+        <button class="tool-btn" id="btn-redo" data-tooltip="Redo (Ctrl+Y)">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M14 8H7a4 4 0 000 8h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <path d="M11 5l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <button class="tool-btn tool-btn--danger" id="btn-clear" data-tooltip="Limpiar anotaciones">
+        <button class="tool-btn tool-btn--danger" id="btn-clear" data-tooltip="Clear annotations">
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M3 5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <path d="M7 5V3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
