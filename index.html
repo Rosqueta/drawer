@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SL Support — Image Editor</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- WORKSPACE (ocupa toda la pantalla) -->
+  <main class="workspace">
+
+    <!-- Estado vacío: drag & drop -->
+    <div class="dropzone" id="dropzone">
+      <div class="dropzone__content">
+        <div class="dropzone__icon">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="4" y="4" width="40" height="40" rx="10" fill="#EEF1FF"/>
+            <rect x="12" y="14" width="24" height="20" rx="3" stroke="#849FFF" stroke-width="2"/>
+            <circle cx="18" cy="21" r="2.5" fill="#849FFF"/>
+            <path d="M12 28l7-6 5 5 3-3 6 6" stroke="#849FFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <p class="dropzone__label">Arrastra tu captura aquí</p>
+        <p class="dropzone__paste-hint">o pega con <kbd>⌘V</kbd> / <kbd>Ctrl+V</kbd></p>
+        <div class="dropzone__options">
+          <label class="btn btn--secondary" for="file-input">Seleccionar imagen</label>
+        </div>
+        <input type="file" id="file-input" accept="image/*" hidden />
+      </div>
+    </div>
+
+    <!-- Estado con imagen: canvas -->
+    <div class="canvas-wrapper" id="canvas-wrapper" hidden>
+      <canvas id="canvas"></canvas>
+    </div>
+
+  </main>
+
+  <!-- LOGO (flotante, esquina superior izquierda) -->
+  <div class="float-logo">
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#9DB2FF"/>
+      <path d="M25.0008 14.8439V17.1534H17.824C17.4539 17.1534 17.1541 17.4532 17.1541 17.8232V25H14.8447V18.7848L10.45 23.1795L8.81858 21.5453L13.2132 17.1507H6.99805V14.8412H13.2105L8.81858 10.452L10.45 8.81783L14.8447 13.2125V7H17.1541V13.2152L21.5488 8.82053L23.1802 10.4547L18.7883 14.8466H25.0035L25.0008 14.8439Z" fill="#0D423E"/>
+      <path d="M19.4614 19.4593L19.4595 19.4612C19.0094 19.912 19.0099 20.6422 19.4607 21.0923L21.0317 22.6612C21.4825 23.1113 22.2127 23.1108 22.6628 22.6601L22.6647 22.6582C23.1148 22.2074 23.1143 21.4772 22.6636 21.0271L21.0925 19.4582C20.6418 19.0081 19.9115 19.0086 19.4614 19.4593Z" fill="#0D423E"/>
+    </svg>
+  </div>
+
+  <!-- ACCIONES (flotante, esquina superior derecha) -->
+  <div class="float-actions">
+    <label class="tool-btn tool-btn--float" id="btn-new-image" for="file-input-replace" data-tooltip-below="Nueva imagen" hidden>
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <rect x="2" y="4" width="14" height="11" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="6.5" cy="8" r="1.5" fill="currentColor"/>
+        <path d="M2 12l3.5-3 3 3 2-2 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M12 2v4M10 4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </label>
+    <input type="file" id="file-input-replace" accept="image/*" hidden />
+    <button class="tool-btn tool-btn--float" id="btn-copy" data-tooltip-below="Copiar imagen">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <rect x="6" y="6" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M12 6V4.5A1.5 1.5 0 0010.5 3h-6A1.5 1.5 0 003 4.5v6A1.5 1.5 0 004.5 12H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <button class="btn btn--primary" id="btn-export">Descargar</button>
+  </div>
+
+  <!-- OVERLAY drag & drop (reemplazar imagen) -->
+  <div class="drop-overlay" id="drop-overlay" hidden>
+    <div class="drop-overlay__pill">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M10 3v10M5 8l5-5 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Suelta para reemplazar la imagen
+    </div>
+  </div>
+
+  <!-- ZOOM CONTROLS (flotante, esquina inferior derecha) -->
+  <div class="zoom-controls" id="zoom-controls" hidden>
+    <button class="zoom-btn" id="btn-zoom-out" data-tooltip="Reducir zoom (-)">−</button>
+    <button class="zoom-btn zoom-btn--label" id="btn-zoom-fit" data-tooltip="Ajustar al workspace (0)">
+      <span id="zoom-value">100%</span>
+    </button>
+    <button class="zoom-btn" id="btn-zoom-in" data-tooltip="Aumentar zoom (+)">+</button>
+  </div>
+
+  <!-- CROP BAR (flotante, aparece al recortar) -->
+  <div id="crop-bar" class="crop-bar" hidden>
+    <span class="crop-bar__hint">Arrastra para seleccionar el área a recortar</span>
+    <div class="crop-bar__actions">
+      <button id="btn-crop-cancel" class="crop-bar__btn">Cancelar</button>
+      <button id="btn-crop-confirm" class="crop-bar__btn crop-bar__btn--primary" disabled>Aplicar recorte</button>
+    </div>
+  </div>
+
+  <!-- TOOLBAR (flotante, abajo centro) -->
+  <footer class="toolbar-bar">
+    <div class="toolbar" id="toolbar">
+
+      <!-- Herramientas de anotación -->
+      <div class="toolbar__group">
+        <button class="tool-btn" data-tool="select" data-tooltip="Seleccionar (V)">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 2l10 7-5.5 1.5L7 16 4 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="tool-btn" data-tool="rect" data-tooltip="Rectángulo (R)">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <rect x="3" y="4" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </button>
+        <button class="tool-btn" data-tool="arrow" data-tooltip="Flecha (A)">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 14L13 5M13 5H8M13 5v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="tool-btn" data-tool="blur" data-tooltip="Difuminar (B)">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <circle cx="9" cy="9" r="5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/>
+            <circle cx="9" cy="9" r="2" fill="currentColor" opacity="0.4"/>
+          </svg>
+        </button>
+        <button class="tool-btn" data-tool="crop" data-tooltip="Recortar (C)">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M5 1v12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M1 5h12v12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="toolbar__divider"></div>
+
+      <!-- Padding -->
+      <div class="toolbar__group toolbar__group--padding">
+        <span class="toolbar__label">Padding</span>
+        <div class="preset-btns">
+          <button class="preset-btn active" data-padding="80">M</button>
+          <button class="preset-btn" data-padding="140">L</button>
+          <button class="preset-btn" data-padding="200">XL</button>
+        </div>
+      </div>
+
+      <div class="toolbar__divider"></div>
+
+      <!-- Border radius -->
+      <div class="toolbar__group toolbar__group--radius">
+        <span class="toolbar__label">Bordes</span>
+        <div class="preset-btns">
+          <button class="preset-btn active" data-radius="8" data-tooltip="Bordes suaves (8px)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 10V6a4 4 0 0 1 4-4h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button class="preset-btn" data-radius="16" data-tooltip="Bordes redondos (16px)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 12V8a6 6 0 0 1 6-6h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="toolbar__divider"></div>
+
+      <!-- Historial -->
+      <div class="toolbar__group">
+        <button class="tool-btn" id="btn-undo" data-tooltip="Deshacer (Ctrl+Z)">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 8H11a4 4 0 010 8H7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M7 5L4 8l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="tool-btn" id="btn-redo" data-tooltip="Rehacer (Ctrl+Y)">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M14 8H7a4 4 0 000 8h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M11 5l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="tool-btn tool-btn--danger" id="btn-clear" data-tooltip="Limpiar anotaciones">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M3 5h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M7 5V3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M5 5l.75 9.5a.5.5 0 0 0 .5.5h5.5a.5.5 0 0 0 .5-.5L13 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M7.5 8v4M10.5 8v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
