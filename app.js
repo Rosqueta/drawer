@@ -55,6 +55,7 @@ function init() {
   setupControls();
   setupShareDropdown();
   setupKeyboard();
+  setupCalloutBuilder();
   setupPaste();
   initSegCtrls();
 }
@@ -753,6 +754,7 @@ function setupShareDropdown() {
 // ── Teclado ───────────────────────────────────────────────
 function setupKeyboard() {
   document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
     if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) { e.preventDefault(); undo(); }
     if (e.key === 'z' && (e.ctrlKey || e.metaKey) &&  e.shiftKey) { e.preventDefault(); redo(); }
     if (e.key === 'y' && (e.ctrlKey || e.metaKey))                { e.preventDefault(); redo(); }
@@ -774,6 +776,7 @@ function setupKeyboard() {
     if (e.key === 'c' && !e.ctrlKey && !e.metaKey) activateTool('crop');
     if (e.key === 'Enter' && state.tool === 'crop') { e.preventDefault(); confirmCrop(); }
     if (e.key === 'Escape' && state.tool === 'crop') cancelCrop();
+    if (e.key === 'm') document.getElementById('btn-callout').click();
   });
 }
 
@@ -917,6 +920,109 @@ function initSegCtrls() {
     thumb.style.transform  = `translateX(${active.offsetLeft - 3}px)`;
     requestAnimationFrame(() => { thumb.style.transition = ''; });
   });
+}
+
+// ── Callout Builder ───────────────────────────────────────
+function setupCalloutBuilder() {
+  const btn      = document.getElementById('btn-callout');
+  const panel    = document.getElementById('callout-builder');
+  const closeBtn = document.getElementById('callout-builder-close');
+  const textarea = document.getElementById('callout-text');
+  const preview  = document.getElementById('callout-preview');
+  const copyBtn  = document.getElementById('callout-copy-btn');
+
+  let activeType = 'note';
+
+  const TYPES = {
+    note:    { label: 'Note',    slug: 'note',    color: '#849FFF', svgInner: '<circle cx="8" cy="4.5" r="1.3" fill="white"/><rect x="6.8" y="7" width="2.4" height="6" rx="1.2" fill="white"/>', exportChar: 'i',       iconStyle: 'color:#fff;font-weight:700;font-size:15px;font-family:Georgia,serif;font-style:italic;' },
+    tip:     { label: 'Tip',     slug: 'tip',     color: '#FFD15D', svgInner: '<path d="M8 2.5L9.3 6.2L13.2 6.3L10.1 8.7L11.2 12.5L8 10.2L4.8 12.5L5.9 8.7L2.8 6.3L6.7 6.2Z" fill="white"/>', exportChar: '&#9733;', iconStyle: 'color:#fff;font-weight:700;font-size:15px;font-family:Arial,sans-serif;' },
+    warning: { label: 'Warning', slug: 'warning', color: '#FF9365', svgInner: '<rect x="6.8" y="3" width="2.4" height="7" rx="1.2" fill="white"/><circle cx="8" cy="12.5" r="1.3" fill="white"/>', exportChar: '!',       iconStyle: 'color:#fff;font-weight:700;font-size:17px;font-family:Arial,sans-serif;' },
+  };
+
+  function makeInlineSvg(svgInner) {
+    return `<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">${svgInner}</svg>`;
+  }
+
+
+  function updatePreview() {
+    const t    = TYPES[activeType];
+    const text = textarea.value.trim();
+    preview.innerHTML = buildPreviewHTML(t, text);
+  }
+
+  function buildPreviewHTML(t, text) {
+    const displayText = text || 'Your message will appear here…';
+    return `
+      <div class="callout-preview-box" style="border-color:${t.color};">
+        <div class="callout-preview-box__icon" style="background:${t.color};">${makeInlineSvg(t.svgInner)}</div>
+        <p class="callout-preview-box__text"><strong>${t.label}:</strong> ${escapeHtml(displayText)}</p>
+      </div>`;
+  }
+
+  function buildExportHTML(t, text) {
+    const escaped = escapeHtml(text || '');
+    return `<!-- ✏️ Callout: ${t.label} — inicio -->\n<div style="box-sizing:border-box;display:flex;align-items:flex-start;gap:22px;padding:20px 24px;border:3px solid ${t.color};border-radius:6px;margin:16px 0;background:#ffffff;">\n  <div style="flex-shrink:0;width:32px;height:32px;border-radius:50%;background:${t.color};display:flex;align-items:center;justify-content:center;"><span style="${t.iconStyle}">${t.exportChar}</span></div>\n  <p style="margin:0;padding-top:3px;font-family:'Open Sans',sans-serif;font-size:14px;line-height:26px;color:#2e383a;"><strong style="font-weight:600;">${t.label}:</strong> ${escaped}</p>\n</div>\n<!-- Callout: ${t.label} — fin ✏️ -->`;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Toggle panel
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      btn.classList.add('active');
+      textarea.focus();
+      updatePreview();
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  closeBtn.addEventListener('click', () => {
+    panel.hidden = true;
+    btn.classList.remove('active');
+  });
+
+  // Type selector
+  document.querySelectorAll('.callout-type-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.callout-type-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      activeType = b.dataset.calloutType;
+      updatePreview();
+    });
+  });
+
+  // Live preview
+  textarea.addEventListener('input', updatePreview);
+
+  // Copy HTML
+  copyBtn.addEventListener('click', () => {
+    const t    = TYPES[activeType];
+    const html = buildExportHTML(t, textarea.value.trim());
+    navigator.clipboard.writeText(html).then(() => {
+      copyBtn.classList.add('copied');
+      copyBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 18 18" fill="none"><path d="M3 9l4 4 8-8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Copied!';
+      setTimeout(() => {
+        copyBtn.classList.remove('copied');
+        copyBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 18 18" fill="none"><rect x="6" y="6" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M12 6V4.5A1.5 1.5 0 0010.5 3h-6A1.5 1.5 0 003 4.5v6A1.5 1.5 0 004.5 12H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Copy HTML';
+      }, 2000);
+    });
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!panel.hidden && !panel.contains(e.target) && e.target !== btn) {
+      panel.hidden = true;
+      btn.classList.remove('active');
+    }
+  });
+
+  // Initial preview
+  updatePreview();
 }
 
 // ── Arranque ──────────────────────────────────────────────
