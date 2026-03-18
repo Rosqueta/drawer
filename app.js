@@ -4,11 +4,14 @@ const ARTBOARD_BG      = '#E8E8E8';
 const BLUR_RADIUS      = 12;
 
 // ── Estado ────────────────────────────────────────────────
+let _selectionAnimFrame = null;
+
 const state = {
   image:       null,   // HTMLImageElement original
   padding:     80,
   radius:      8,
   zoom:        1,
+  dashOffset:  0,
   tool:        'select',
   annotations: [],     // historial de anotaciones
   history:     [],     // pila undo
@@ -42,7 +45,6 @@ const btnShare     = document.getElementById('btn-share');
 const shareMenu    = document.getElementById('share-menu');
 const btnUndo      = document.getElementById('btn-undo');
 const btnRedo      = document.getElementById('btn-redo');
-const btnClear     = document.getElementById('btn-clear');
 
 const radiusBtns = document.querySelectorAll('[data-radius]');
 
@@ -56,6 +58,7 @@ function init() {
   setupShareDropdown();
   setupKeyboard();
   setupCalloutBuilder();
+  setupTextTool();
   setupPaste();
   initSegCtrls();
 }
@@ -149,6 +152,7 @@ function showCanvas() {
   dropzone.hidden = true;
   canvasWrapper.hidden = false;
   document.getElementById('zoom-controls').hidden = false;
+  document.getElementById('history-controls').hidden = false;
   document.getElementById('btn-new-image').hidden = false;
 }
 
@@ -193,6 +197,17 @@ function renderCanvas() {
   // Selección activa
   if (state.selected !== null && state.selected < state.annotations.length) {
     drawSelection(state.annotations[state.selected]);
+    if (!_selectionAnimFrame) {
+      _selectionAnimFrame = requestAnimationFrame(function tick() {
+        state.dashOffset = (state.dashOffset + 0.4) % 16;
+        renderCanvas();
+        _selectionAnimFrame = requestAnimationFrame(tick);
+      });
+    }
+  } else if (_selectionAnimFrame) {
+    cancelAnimationFrame(_selectionAnimFrame);
+    _selectionAnimFrame = null;
+    state.dashOffset = 0;
   }
 
   // Overlay de recorte
@@ -307,12 +322,20 @@ function cancelCrop() {
 }
 
 function showCropBar() {
-  document.getElementById('crop-bar').hidden = false;
+  const bar = document.getElementById('crop-bar');
+  bar.classList.remove('crop-bar--closing');
+  bar.hidden = false;
 }
 
 function hideCropBar() {
-  document.getElementById('crop-bar').hidden = true;
+  const bar = document.getElementById('crop-bar');
   document.getElementById('btn-crop-confirm').disabled = true;
+  if (bar.hidden || bar.classList.contains('crop-bar--closing')) return;
+  bar.classList.add('crop-bar--closing');
+  setTimeout(() => {
+    bar.hidden = true;
+    bar.classList.remove('crop-bar--closing');
+  }, 200);
 }
 
 // ── Dibujar anotaciones ───────────────────────────────────
@@ -332,9 +355,58 @@ function drawAnnotation(a) {
 
   } else if (a.type === 'blur') {
     applyBlur(a);
+  } else if (a.type === 'text') {
+    drawTextAnnotation(a);
+  } else if (a.type === 'step') {
+    drawStepAnnotation(a);
   }
 
   ctx.restore();
+}
+
+function drawTextAnnotation(a) {
+  if (!a.text) return;
+  const fontSize = 14, lineH = 20, padH = 10, padV = 8, r = 6;
+  ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  const lines = a.text.split('\n');
+  const maxW  = Math.max(...lines.map(l => ctx.measureText(l).width));
+  const boxW  = maxW + padH * 2;
+  const boxH  = lines.length * lineH + padV * 2;
+
+  // Background
+  ctx.fillStyle = ANNOTATION_COLOR;
+  roundedRect(ctx, a.x, a.y, boxW, boxH, r);
+  ctx.fill();
+
+  // White text, one line at a time
+  ctx.fillStyle    = '#FFFFFF';
+  ctx.textBaseline = 'middle';
+  lines.forEach((line, i) => {
+    ctx.fillText(line, a.x + padH, a.y + padV + lineH * i + lineH / 2);
+  });
+}
+
+function drawStepAnnotation(a) {
+  const r = 14;
+  ctx.beginPath();
+  ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = ANNOTATION_COLOR;
+  ctx.fill();
+
+  ctx.fillStyle    = '#FFFFFF';
+  ctx.font         = `700 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(a.n), a.x, a.y + 0.5);
+  ctx.textAlign    = 'left'; // reset
+}
+
+function getTextBounds(a) {
+  const fontSize = 14, lineH = 20, padH = 10, padV = 8;
+  ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+  const lines = (a.text || ' ').split('\n');
+  const maxW  = Math.max(...lines.map(l => ctx.measureText(l).width), 40);
+  return { x: a.x, y: a.y, w: maxW + padH * 2, h: lines.length * lineH + padV * 2 };
 }
 
 function drawArrow(x1, y1, x2, y2) {
@@ -413,6 +485,8 @@ function getHandles(a) {
       { id: 'end',   x: a.x2, y: a.y2 },
     ];
   }
+  if (a.type === 'text') return []; // move only
+  if (a.type === 'step') return []; // move only
   return [];
 }
 
@@ -423,6 +497,13 @@ function hitAnnotation(a, x, y) {
   }
   if (a.type === 'arrow') {
     return distToSegment(x, y, a.x1, a.y1, a.x2, a.y2) < 10 / state.zoom;
+  }
+  if (a.type === 'text') {
+    const b = getTextBounds(a);
+    return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+  }
+  if (a.type === 'step') {
+    return Math.hypot(x - a.x, y - a.y) <= 14;
   }
   return false;
 }
@@ -463,11 +544,23 @@ function drawSelection(a) {
   ctx.save();
   ctx.strokeStyle = '#849FFF';
   ctx.lineWidth   = lw;
+  ctx.lineDashOffset = -state.dashOffset / state.zoom;
 
   if (a.type === 'rect' || a.type === 'blur') {
     const b = normalizeBounds(a);
     ctx.setLineDash([5 / state.zoom, 3 / state.zoom]);
     ctx.strokeRect(b.x - lw, b.y - lw, b.w + lw * 2, b.h + lw * 2);
+    ctx.setLineDash([]);
+  } else if (a.type === 'text') {
+    const b = getTextBounds(a);
+    ctx.setLineDash([5 / state.zoom, 3 / state.zoom]);
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.setLineDash([]);
+  } else if (a.type === 'step') {
+    ctx.setLineDash([5 / state.zoom, 3 / state.zoom]);
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, 14 + lw * 2, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.setLineDash([]);
   }
 
@@ -529,7 +622,9 @@ function onMouseDown(e) {
       state.dragging = true;
       state.hasMoved = false;
       const ann = state.annotations[found];
-      if (ann.type === 'rect' || ann.type === 'blur') {
+      if (ann.type === 'rect' || ann.type === 'blur' || ann.type === 'text') {
+        state.dragOffset = { x: pos.x - ann.x, y: pos.y - ann.y };
+      } else if (ann.type === 'step') {
         state.dragOffset = { x: pos.x - ann.x, y: pos.y - ann.y };
       } else if (ann.type === 'arrow') {
         state.dragOffset = { x: pos.x - ann.x1, y: pos.y - ann.y1 };
@@ -537,6 +632,33 @@ function onMouseDown(e) {
     } else {
       state.selected = null;
     }
+    renderCanvas();
+    return;
+  }
+
+  if (state.tool === 'text') {
+    // If clicking on an existing text annotation, re-edit it
+    for (let i = state.annotations.length - 1; i >= 0; i--) {
+      const a = state.annotations[i];
+      if (a.type === 'text' && hitAnnotation(a, pos.x, pos.y)) {
+        state.history.push(snapshotAnnotations());
+        state.redoStack = [];
+        const ann = state.annotations.splice(i, 1)[0];
+        state.selected = null;
+        renderCanvas();
+        showTextInput(ann.x, ann.y, ann.text);
+        return;
+      }
+    }
+    showTextInput(pos.x, pos.y);
+    return;
+  }
+
+  if (state.tool === 'step') {
+    const nextN = state.annotations.filter(a => a.type === 'step').length + 1;
+    state.history.push(snapshotAnnotations());
+    state.redoStack = [];
+    state.annotations.push({ type: 'step', x: pos.x, y: pos.y, n: nextN });
     renderCanvas();
     return;
   }
@@ -585,7 +707,10 @@ function onMouseMove(e) {
         state.hasMoved = true;
       }
       const ann = state.annotations[state.selected];
-      if (ann.type === 'rect' || ann.type === 'blur') {
+      if (ann.type === 'rect' || ann.type === 'blur' || ann.type === 'text') {
+        ann.x = pos.x - state.dragOffset.x;
+        ann.y = pos.y - state.dragOffset.y;
+      } else if (ann.type === 'step') {
         ann.x = pos.x - state.dragOffset.x;
         ann.y = pos.y - state.dragOffset.y;
       } else if (ann.type === 'arrow') {
@@ -634,10 +759,25 @@ function onMouseMove(e) {
 
 function onMouseUp() {
   if (state.tool === 'select') {
-    state.dragging      = false;
-    state.resizingHandle = null;
+    const didMove = state.hasMoved;
+    state.dragging           = false;
+    state.resizingHandle     = null;
     state.annotationSnapshot = null;
-    canvas.style.cursor = 'default';
+    canvas.style.cursor      = 'default';
+
+    // Single click (no drag) on a text annotation → re-edit
+    if (!didMove && state.selected !== null) {
+      const ann = state.annotations[state.selected];
+      if (ann && ann.type === 'text') {
+        state.history.push(snapshotAnnotations());
+        state.redoStack = [];
+        state.annotations.splice(state.selected, 1);
+        state.selected = null;
+        renderCanvas();
+        showTextInput(ann.x, ann.y, ann.text);
+        return;
+      }
+    }
     return;
   }
 
@@ -698,11 +838,40 @@ function setupControls() {
   // Segmented control: padding
   document.querySelectorAll('[data-padding]').forEach(btn => {
     btn.addEventListener('click', () => {
-      state.padding = parseInt(btn.dataset.padding);
+      const newPadding = parseInt(btn.dataset.padding);
       document.querySelectorAll('[data-padding]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       moveSegThumb(btn);
+      if (newPadding === state.padding) return;
+
+      // Snapshot del estado actual para cross-fade suave
+      const snap = document.createElement('img');
+      snap.src = canvas.toDataURL();
+      Object.assign(snap.style, {
+        position:      'absolute',
+        width:         canvas.style.width,
+        height:        canvas.style.height,
+        top:           '50%',
+        left:          '50%',
+        transform:     'translate(-50%, -50%)',
+        pointerEvents: 'none',
+        zIndex:        '5',
+        borderRadius:  '4px',
+        boxShadow:     'var(--shadow-lg)',
+        transition:    'opacity 0.35s ease',
+        opacity:       '1',
+      });
+      canvasWrapper.appendChild(snap);
+
+      // Renderizar nuevo estado por debajo del snapshot
+      state.padding = newPadding;
       renderCanvas();
+
+      // Fade-out del snapshot para revelar el nuevo estado
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        snap.style.opacity = '0';
+        setTimeout(() => snap.remove(), 350);
+      }));
     });
   });
 
@@ -720,35 +889,32 @@ function setupControls() {
   // Zoom
   document.getElementById('btn-zoom-in') .addEventListener('click', zoomIn);
   document.getElementById('btn-zoom-out').addEventListener('click', zoomOut);
-  document.getElementById('btn-zoom-fit').addEventListener('click', zoomFit);
 
   // Undo / Redo / Clear
   btnUndo.addEventListener('click', undo);
   btnRedo.addEventListener('click', redo);
-  btnClear.addEventListener('click', clearAll);
 
 }
 
 // ── Share dropdown ────────────────────────────────────────
 function setupShareDropdown() {
+  function closeShareMenu() {
+    if (shareMenu.hidden || shareMenu.classList.contains('share-menu--closing')) return;
+    shareMenu.classList.add('share-menu--closing');
+    setTimeout(() => {
+      shareMenu.hidden = true;
+      shareMenu.classList.remove('share-menu--closing');
+    }, 120);
+  }
+
   btnShare.addEventListener('click', (e) => {
     e.stopPropagation();
-    shareMenu.hidden = !shareMenu.hidden;
+    if (!shareMenu.hidden) { closeShareMenu(); } else { shareMenu.hidden = false; }
   });
 
-  btnExport.addEventListener('click', () => {
-    shareMenu.hidden = true;
-    exportPNG();
-  });
-
-  btnCopy.addEventListener('click', () => {
-    shareMenu.hidden = true;
-    copyToClipboard();
-  });
-
-  document.addEventListener('click', () => {
-    shareMenu.hidden = true;
-  });
+  btnExport.addEventListener('click', () => { closeShareMenu(); exportPNG(); });
+  btnCopy.addEventListener('click',   () => { closeShareMenu(); copyToClipboard(); });
+  document.addEventListener('click',  () => { closeShareMenu(); });
 }
 
 // ── Teclado ───────────────────────────────────────────────
@@ -773,10 +939,12 @@ function setupKeyboard() {
     if (e.key === 'r') activateTool('rect');
     if (e.key === 'a') activateTool('arrow');
     if (e.key === 'b') activateTool('blur');
+    if (e.key === 's') activateTool('step');
     if (e.key === 'c' && !e.ctrlKey && !e.metaKey) activateTool('crop');
     if (e.key === 'Enter' && state.tool === 'crop') { e.preventDefault(); confirmCrop(); }
     if (e.key === 'Escape' && state.tool === 'crop') cancelCrop();
     if (e.key === 'm') document.getElementById('btn-callout').click();
+    if (e.key === 't') activateTool('text');
   });
 }
 
@@ -968,23 +1136,30 @@ function setupCalloutBuilder() {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  function closePanel() {
+    if (panel.classList.contains('callout-builder--closing')) return;
+    panel.classList.add('callout-builder--closing');
+    panel.addEventListener('animationend', () => {
+      panel.hidden = true;
+      panel.classList.remove('callout-builder--closing');
+      btn.classList.remove('active');
+    }, { once: true });
+  }
+
   // Toggle panel
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    panel.hidden = !panel.hidden;
     if (!panel.hidden) {
+      closePanel();
+    } else {
+      panel.hidden = false;
       btn.classList.add('active');
       textarea.focus();
       updatePreview();
-    } else {
-      btn.classList.remove('active');
     }
   });
 
-  closeBtn.addEventListener('click', () => {
-    panel.hidden = true;
-    btn.classList.remove('active');
-  });
+  closeBtn.addEventListener('click', () => { closePanel(); });
 
   // Type selector
   document.querySelectorAll('.callout-type-btn').forEach(b => {
@@ -1015,14 +1190,116 @@ function setupCalloutBuilder() {
 
   // Close on outside click
   document.addEventListener('click', (e) => {
-    if (!panel.hidden && !panel.contains(e.target) && e.target !== btn) {
-      panel.hidden = true;
-      btn.classList.remove('active');
+    if (!panel.hidden && !panel.classList.contains('callout-builder--closing') && !panel.contains(e.target) && e.target !== btn) {
+      closePanel();
     }
   });
 
   // Initial preview
   updatePreview();
+}
+
+// ── Text tool ─────────────────────────────────────────────
+let _textInputPos = { x: 0, y: 0 };
+
+function setupTextTool() {
+  const input = document.getElementById('text-input-field');
+  const sizer = document.getElementById('text-input-sizer');
+
+  function autoResize() {
+    // Sync sizer font with current input styles
+    sizer.style.fontSize  = input.style.fontSize;
+    sizer.style.padding   = input.style.padding;
+
+    // Measure each line independently to get the widest one
+    const lines   = input.value.split('\n');
+    const longest = lines.reduce((a, b) => a.length > b.length ? a : b, '');
+    sizer.textContent  = longest || input.getAttribute('placeholder') || ' ';
+    input.style.width  = Math.max(80, sizer.offsetWidth + 4) + 'px';
+
+    // Height: let scrollHeight compute (wrapper is visible at this point)
+    input.style.height = 'auto';
+    input.style.height = input.scrollHeight + 'px';
+  }
+
+  input.addEventListener('input', autoResize);
+
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // prevent toolbar shortcuts while typing
+    if (e.key === 'Escape') { e.preventDefault(); cancelTextInput(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitTextInput(); }
+    // Shift+Enter = new line (default textarea behaviour)
+  });
+
+  // Commit when clicking outside the input (capture phase fires before canvas handlers)
+  document.addEventListener('mousedown', (e) => {
+    const wrapper = document.getElementById('text-input-wrapper');
+    if (!wrapper.hidden && !wrapper.contains(e.target)) {
+      commitTextInput();
+    }
+  }, true);
+}
+
+function showTextInput(canvasX, canvasY, initialText = '') {
+  const wrapper = document.getElementById('text-input-wrapper');
+  const input   = document.getElementById('text-input-field');
+
+  // Convert canvas coords → screen coords
+  const rect    = canvas.getBoundingClientRect();
+  const screenX = rect.left + (canvasX / canvas.width)  * rect.width;
+  const screenY = rect.top  + (canvasY / canvas.height) * rect.height;
+
+  // Scale font + padding with zoom so input visually matches canvas output
+  const fSize  = Math.max(11, Math.round(14 * state.zoom));
+  const padH   = Math.round(10 * state.zoom);
+  const padV   = Math.round(6  * state.zoom);
+  const radius = Math.round(6  * state.zoom);
+
+  wrapper.style.left = screenX + 'px';
+  wrapper.style.top  = screenY + 'px';
+
+  input.style.fontSize     = fSize  + 'px';
+  input.style.padding      = `${padV}px ${padH}px`;
+  input.style.lineHeight   = '1.45';
+  input.style.borderRadius = radius + 'px';
+  input.value              = initialText;
+  input.style.width        = '80px';
+  input.style.height       = 'auto';
+
+  _textInputPos  = { x: canvasX, y: canvasY };
+  // Show wrapper BEFORE measuring so scrollHeight / offsetWidth are correct
+  wrapper.hidden = false;
+  // Trigger auto-resize now that the element is in the layout
+  input.dispatchEvent(new Event('input'));
+
+  setTimeout(() => {
+    input.focus();
+    if (initialText) input.select();
+  }, 0);
+}
+
+function commitTextInput() {
+  const wrapper = document.getElementById('text-input-wrapper');
+  if (wrapper.hidden) return; // already committed/cancelled
+  const input = document.getElementById('text-input-field');
+  const text  = input.value.trim();
+
+  wrapper.hidden = true;
+  input.value    = '';
+
+  if (text) {
+    state.history.push(snapshotAnnotations());
+    state.redoStack = [];
+    state.annotations.push({ type: 'text', x: _textInputPos.x, y: _textInputPos.y, text });
+    renderCanvas();
+  }
+}
+
+function cancelTextInput() {
+  const wrapper = document.getElementById('text-input-wrapper');
+  if (wrapper.hidden) return;
+  wrapper.hidden = true;
+  document.getElementById('text-input-field').value = '';
 }
 
 // ── Arranque ──────────────────────────────────────────────
